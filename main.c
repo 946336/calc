@@ -41,6 +41,7 @@ int main()
 
     while (!feof(stdin)) {
         fprintf(stdout, "%s", PROMPT);
+        fflush(stdout);
         len = my_getline(&expr, &size, stdin);
 
         // Empty input

@@ -13,7 +13,7 @@ parse.o: parse.c parse.h ast.o explist.o operator.o tokenize.o
 	$(CC) $(CFLAGS) $(NOLINK) $(OPTIMIZE) parse.c -o $@ $(LDFLAGS)
 
 calc: main.c explist.o ast.o operator.o tokenize.o parse.o
-	$(CC) $(CFLAGS) $(OPTIMIZE) $^ -o m\'lady $(LDFLAGS)
+	$(CC) $(CFLAGS) $(OPTIMIZE) $^ -o calc $(LDFLAGS)
 
 explist.o: explist.h explist.c ast.o operator.o
 	$(CC) $(CFLAGS) $(NOLINK) $(OPTIMIZE) explist.c -o $@ $(LDFLAGS)

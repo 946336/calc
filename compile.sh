@@ -24,9 +24,22 @@ echo "/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
 
 " >> solution.tmp
 
-cat main.c operator.h operator.c ast.h ast.c tokenize.h tokenize.c \
-    explist.h explist.c parse.h parse.c >> solution.tmp
+cat \
+    operator.h \
+    ast.h \
+    tokenize.h \
+    explist.h \
+    parse.h \
+    main.c \
+    operator.c \
+    ast.c \
+    tokenize.c \
+    explist.c \
+    parse.c \
+    >> solution.tmp
 
 mv solution.tmp solution.c
+
+sed -i 's/#include ".*/\/\/\0/g' solution.c
 
 make solution

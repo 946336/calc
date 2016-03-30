@@ -20,14 +20,177 @@
 
 
 /****************************************************************************/
+/*                                operator.h                                */
+/****************************************************************************/
+
+#ifndef CALC_OPERATOR_H
+#define CALC_OPERATOR_H 
+
+#include <stdbool.h>
+
+typedef enum TYPE { LITERAL = 0,
+                    PAREN,
+                    EXP, LOG,
+                    MOD, INT,
+                    PROD, QUOT,
+                    SUM, DIFF
+                  } TYPE;
+
+static const char delim[] = "()^|%\\*/+-";
+
+/****************************************************************************/
+
+#define LIT_CHAR    '$'
+#define PAREN_CHAR  '&'
+#define EXP_CHAR    '^'
+#define LOG_CHAR    '|'
+#define MOD_CHAR    '%'
+#define INT_CHAR    '\\'
+#define PROD_CHAR   '*'
+#define QUOT_CHAR   '/'
+#define SUM_CHAR    '+'
+#define DIFF_CHAR   '-'
+
+#define LPAREN '('
+#define RPAREN ')'
+
+/****************************************************************************/
+
+TYPE  stringtoTYPE(char *str);
+const char *TYPEtostring(TYPE type);
+
+TYPE chartoTYPE(char c);
+char TYPEtochar(TYPE type);
+
+bool hasHigherPriorityThan(TYPE lhs, TYPE rhs);
+
+#endif
+
+/****************************************************************************/
+/*                                  ast.h                                   */
+/****************************************************************************/
+
+#ifndef CALC_AST_H
+#define CALC_AST_H 
+
+//#include "operator.h"
+
+#include <stdbool.h>
+#include <stdio.h>
+
+#define VERBOSE false
+
+typedef struct AST_Node *AST_Node;
+
+AST_Node AST_new();
+void     AST_free(AST_Node *n);
+AST_Node AST_copy(AST_Node n);
+
+AST_Node AST_settype(AST_Node n, TYPE type);
+AST_Node AST_setright(AST_Node n, AST_Node r);
+AST_Node AST_setleft(AST_Node n, AST_Node l);
+AST_Node AST_setnum(AST_Node n, double num);
+
+TYPE     AST_gettype(AST_Node n);
+AST_Node AST_getright(AST_Node n);
+AST_Node AST_getleft(AST_Node n);
+double   AST_getnum(AST_Node n);
+
+bool        AST_wellformed(AST_Node root);
+bool        AST_caninsertnum(AST_Node root);
+AST_Node    AST_rightmost(AST_Node root);
+
+AST_Node AST_insert(AST_Node n, AST_Node root);
+AST_Node AST_insertnum(AST_Node n, AST_Node root);
+AST_Node AST_insertoperator(AST_Node n, AST_Node root);
+
+bool bindsTighterThan(AST_Node lhs, AST_Node rhs);
+
+void   AST_print(AST_Node root);
+double AST_eval(AST_Node);
+
+/****************************************************************************/
+
+// Exists primarily as a debugging tool. Useful for tracking program execution
+void label(const char *msg);
+
+#endif
+
+/****************************************************************************/
+/*                                tokenize.h                                */
+/****************************************************************************/
+
+#ifndef CALC_TOKENIZE_H
+#define CALC_TOKENIZE_H 
+
+//#include "ast.h"
+//#include "operator.h"
+
+typedef struct Token {
+    char c;
+    AST_Node n;
+} Token;
+
+static const char NULLCHAR = '\0';
+
+Token next_token(char **str);
+
+#endif
+
+/****************************************************************************/
+/*                                 explist.h                                */
+/****************************************************************************/
+
+#ifndef CALC_EXPLIST_H
+#define CALC_EXPLIST_H 
+
+//#include "ast.h"
+//#include "operator.h"
+
+typedef struct Explist *Explist;
+
+Explist Explist_new();
+void    Explist_free(Explist *e);
+
+void Explist_print(Explist e);
+
+Explist Explist_prepend(Explist head, Explist rest);
+Explist Explist_pop(Explist e);
+
+Explist Explist_add(AST_Node n, Explist e);
+
+AST_Node Explist_toAST(Explist e);
+Explist  Explist_collapse(Explist e);
+
+bool Explist_singleton(Explist e);
+
+#endif
+
+/****************************************************************************/
+/*                                 parse.h                                  */
+/****************************************************************************/
+
+#ifndef CALC_PARSE_H
+#define CALC_PARSE_H 
+
+//#include "ast.h"
+//#include "explist.h"
+//#include "tokenize.h"
+//#include "operator.h"
+
+AST_Node parse(char *l);
+
+#endif
+
+/****************************************************************************/
 /*                                  main.c                                  */
 /****************************************************************************/
 
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "parse.h"
-#include "ast.h"
+//#include "parse.h"
+//#include "ast.h"
 
 /****************************************************************************/
 
@@ -62,6 +225,7 @@ int main()
 
     while (!feof(stdin)) {
         fprintf(stdout, "%s", PROMPT);
+        fflush(stdout);
         len = my_getline(&expr, &size, stdin);
 
         // Empty input
@@ -193,53 +357,6 @@ size_t my_getline(char **buf, size_t *size, FILE *fd)
 }
 
 /****************************************************************************/
-/*                                operator.h                                */
-/****************************************************************************/
-
-#ifndef CALC_OPERATOR_H
-#define CALC_OPERATOR_H 
-
-#include <stdbool.h>
-
-typedef enum TYPE { LITERAL = 0,
-                    PAREN,
-                    EXP, LOG,
-                    MOD, INT,
-                    PROD, QUOT,
-                    SUM, DIFF
-                  } TYPE;
-
-static const char delim[] = "()^|%\\*/+-";
-
-/****************************************************************************/
-
-#define LIT_CHAR    '$'
-#define PAREN_CHAR  '&'
-#define EXP_CHAR    '^'
-#define LOG_CHAR    '|'
-#define MOD_CHAR    '%'
-#define INT_CHAR    '\\'
-#define PROD_CHAR   '*'
-#define QUOT_CHAR   '/'
-#define SUM_CHAR    '+'
-#define DIFF_CHAR   '-'
-
-#define LPAREN '('
-#define RPAREN ')'
-
-/****************************************************************************/
-
-TYPE  stringtoTYPE(char *str);
-const char *TYPEtostring(TYPE type);
-
-TYPE chartoTYPE(char c);
-char TYPEtochar(TYPE type);
-
-bool hasHigherPriorityThan(TYPE lhs, TYPE rhs);
-
-#endif
-
-/****************************************************************************/
 /*                                operator.c                                */
 /****************************************************************************/
 
@@ -248,7 +365,7 @@ bool hasHigherPriorityThan(TYPE lhs, TYPE rhs);
 
 #include <string.h>
 
-#include "operator.h"
+//#include "operator.h"
 
 /****************************************************************************/
 
@@ -365,60 +482,10 @@ bool hasHigherPriorityThan(TYPE lhs, TYPE rhs)
 }
 
 /****************************************************************************/
-/*                                  ast.h                                   */
-/****************************************************************************/
-
-#ifndef CALC_AST_H
-#define CALC_AST_H 
-
-#include "operator.h"
-
-#include <stdbool.h>
-#include <stdio.h>
-
-#define VERBOSE false
-
-typedef struct AST_Node *AST_Node;
-
-AST_Node AST_new();
-void     AST_free(AST_Node *n);
-AST_Node AST_copy(AST_Node n);
-
-AST_Node AST_settype(AST_Node n, TYPE type);
-AST_Node AST_setright(AST_Node n, AST_Node r);
-AST_Node AST_setleft(AST_Node n, AST_Node l);
-AST_Node AST_setnum(AST_Node n, double num);
-
-TYPE     AST_gettype(AST_Node n);
-AST_Node AST_getright(AST_Node n);
-AST_Node AST_getleft(AST_Node n);
-double   AST_getnum(AST_Node n);
-
-bool        AST_wellformed(AST_Node root);
-bool        AST_caninsertnum(AST_Node root);
-AST_Node    AST_rightmost(AST_Node root);
-
-AST_Node AST_insert(AST_Node n, AST_Node root);
-AST_Node AST_insertnum(AST_Node n, AST_Node root);
-AST_Node AST_insertoperator(AST_Node n, AST_Node root);
-
-bool bindsTighterThan(AST_Node lhs, AST_Node rhs);
-
-void   AST_print(AST_Node root);
-double AST_eval(AST_Node);
-
-/****************************************************************************/
-
-// Exists primarily as a debugging tool. Useful for tracking program execution
-void label(const char *msg);
-
-#endif
-
-/****************************************************************************/
 /*                                  ast.c                                   */
 /****************************************************************************/
 
-#include "ast.h"
+//#include "ast.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -780,32 +847,11 @@ double AST_eval(AST_Node root)
 }
 
 /****************************************************************************/
-/*                                tokenize.h                                */
-/****************************************************************************/
-
-#ifndef CALC_TOKENIZE_H
-#define CALC_TOKENIZE_H 
-
-#include "ast.h"
-#include "operator.h"
-
-typedef struct Token {
-    char c;
-    AST_Node n;
-} Token;
-
-static const char NULLCHAR = '\0';
-
-Token next_token(char **str);
-
-#endif
-
-/****************************************************************************/
 /*                                tokenize.c                                */
 /****************************************************************************/
 
-#include "tokenize.h"
-#include "operator.h"
+//#include "tokenize.h"
+//#include "operator.h"
 
 #include <string.h>
 #include <ctype.h>
@@ -865,39 +911,10 @@ Token next_token(char **str)
 }
 
 /****************************************************************************/
-/*                                 explist.h                                */
-/****************************************************************************/
-
-#ifndef CALC_EXPLIST_H
-#define CALC_EXPLIST_H 
-
-#include "ast.h"
-#include "operator.h"
-
-typedef struct Explist *Explist;
-
-Explist Explist_new();
-void    Explist_free(Explist *e);
-
-void Explist_print(Explist e);
-
-Explist Explist_prepend(Explist head, Explist rest);
-Explist Explist_pop(Explist e);
-
-Explist Explist_add(AST_Node n, Explist e);
-
-AST_Node Explist_toAST(Explist e);
-Explist  Explist_collapse(Explist e);
-
-bool Explist_singleton(Explist e);
-
-#endif
-
-/****************************************************************************/
 /*                                 explist.c                                */
 /****************************************************************************/
 
-#include "explist.h"
+//#include "explist.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -1000,29 +1017,13 @@ bool Explist_singleton(Explist e)
 /*                                 parse.h                                  */
 /****************************************************************************/
 
-#ifndef CALC_PARSE_H
-#define CALC_PARSE_H 
-
-#include "ast.h"
-#include "explist.h"
-#include "tokenize.h"
-#include "operator.h"
-
-AST_Node parse(char *l);
-
-#endif
-
-/****************************************************************************/
-/*                                 parse.h                                  */
-/****************************************************************************/
-
 #include <stdlib.h>
 #include <stdio.h>
 
-#include "parse.h"
-#include "operator.h"
+//#include "parse.h"
+//#include "operator.h"
 
-#include "ast.h"
+//#include "ast.h"
 
 AST_Node parse(char *l)
 {
