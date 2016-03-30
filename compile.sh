@@ -31,4 +31,4 @@ cat *.{c,h} >> solution.tmp
 
 mv solution.tmp solution.c
 
-gcc -Wall -Wextra -pedantic -std=c99 solution.c -o calc -lm
+make calc

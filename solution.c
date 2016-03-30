@@ -375,7 +375,7 @@ double AST_eval(AST_Node root)
         case EXP: return pow(AST_eval(root->left), AST_eval(root->right));
         case LOG: return log(AST_eval(root->left)) / log(AST_eval(root->right));
         case MOD: return fmod(AST_eval(root->left), AST_eval(root->right));
-        case INT: return (int) AST_eval(root->left) / AST_eval(root->right);
+        case INT: return (int) (AST_eval(root->left) / AST_eval(root->right));
         case PROD: return AST_eval(root->left) * AST_eval(root->right);
         case QUOT: return AST_eval(root->left) / AST_eval(root->right);
         case SUM: return AST_eval(root->left) + AST_eval(root->right);
