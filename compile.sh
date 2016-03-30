@@ -6,7 +6,8 @@ echo "/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * solution.c:  Build a calculator that takes normal calculator input and    *
  *              gives the answer (solution to Intermediate problem #4)       *
  *                                                                           *
- *              Alternatively, 'why we don't do things like this in C'       *
+ *              Alternatively, 'why we don't like doing things like this     *
+ *              in C'                                                        *
  *                                                                           *
  * Author:      946336 (https://www.github.com/946336)                       *
  *                                                                           *
