@@ -30,9 +30,10 @@
 
 /****************************************************************************/
 
-const char *HEADER =    "+: (addition), -: (subtraction), *: (multiplication), "
-                        "/: (division), %: (modulus), \\: (integer division), "
-                        "^: (power), |: (log: number on left, base on right).\n"
+const char *HEADER =    "+: (addition), -: (subtraction), "
+                        "*: (multiplication), /: (division), %: (modulus),"
+                        " \\: (integer division), ^: (power), "
+                        "|: (log: number on left, base on right).\n"
                         "Parentheses will be honored.\n\n";
 
 const char *PROMPT = ">>> ";
@@ -660,7 +661,8 @@ AST_Node AST_insertoperator(AST_Node n, AST_Node root)
             fprintf(stderr, "%s: [%s] %s [%s and %s]\n",
                             "AST_insertoperator: malformed tree. Operator "
                             "precedence violated", TYPEtostring(n->type),
-                            "does not belong between", TYPEtostring(root->type),
+                            "does not belong between",
+                            TYPEtostring(root->type),
                             TYPEtostring(root->right->type));
             exit(EXIT_FAILURE);
         }
@@ -763,7 +765,8 @@ double AST_eval(AST_Node root)
         case LITERAL: return root->num;
         case PAREN: return AST_eval(root->right);
         case EXP: return pow(AST_eval(root->left), AST_eval(root->right));
-        case LOG: return log(AST_eval(root->left)) / log(AST_eval(root->right));
+        case LOG: return log(AST_eval(root->left)) /
+                         log(AST_eval(root->right));
         case MOD: return fmod(AST_eval(root->left), AST_eval(root->right));
         case INT: return (int) (AST_eval(root->left) / AST_eval(root->right));
         case PROD: return AST_eval(root->left) * AST_eval(root->right);

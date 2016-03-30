@@ -10,9 +10,10 @@
 
 /****************************************************************************/
 
-const char *HEADER =    "+: (addition), -: (subtraction), *: (multiplication), "
-                        "/: (division), %: (modulus), \\: (integer division), "
-                        "^: (power), |: (log: number on left, base on right).\n"
+const char *HEADER =    "+: (addition), -: (subtraction), "
+                        "*: (multiplication), /: (division), %: (modulus),"
+                        " \\: (integer division), ^: (power), "
+                        "|: (log: number on left, base on right).\n"
                         "Parentheses will be honored.\n\n";
 
 const char *PROMPT = ">>> ";
