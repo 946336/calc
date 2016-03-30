@@ -41,6 +41,9 @@ bool bindsTighterThan(AST_Node lhs, AST_Node rhs);
 void   AST_print(AST_Node root);
 double AST_eval(AST_Node);
 
+/****************************************************************************/
+
+// Exists primarily as a debugging tool. Useful for tracking program execution
 void label(const char *msg);
 
 #endif

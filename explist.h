@@ -23,5 +23,7 @@ Explist Explist_add(AST_Node n, Explist e);
 AST_Node Explist_toAST(Explist e);
 Explist  Explist_collapse(Explist e);
 
+bool Explist_singleton(Explist e);
+
 #endif
 

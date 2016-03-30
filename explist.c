@@ -94,3 +94,10 @@ Explist Explist_collapse(Explist e)
     return Explist_pop(e);
 }
 
+bool Explist_singleton(Explist e)
+{
+    if (e == NULL) return false;
+    if (e->rest == NULL) return true;
+    return false;
+}
+

@@ -13,6 +13,7 @@
 AST_Node parse(char *l)
 {
     Explist e = Explist_new();
+    Explist e_;
     Token t;
     Token last = {'\0', NULL};
     AST_Node root = NULL;
@@ -51,9 +52,16 @@ AST_Node parse(char *l)
             continue;
         }
         if (t.c == RPAREN) {
-            e = Explist_collapse(e);
+            e_ = Explist_collapse(e);
+            if (e == e_) {
+                fprintf(stderr, "%s\n", "Unexpected right parenthesis");
+                Explist_free(&e_);
+                AST_free(&t.n);
+                return NULL;
+            }
+            e= e_;
+            
             AST_free(&t.n);
-
             AST_free(&last.n);
             last.c = t.c;
             last.n = AST_copy(t.n);
@@ -65,6 +73,9 @@ AST_Node parse(char *l)
         last.c = t.c;
         last.n = AST_copy(t.n);
     }
+
+    if (!Explist_singleton(e)) fprintf(stderr, "%s\n", "Unclosed parenthesis");
+
     root = Explist_toAST(e);
     Explist_free(&e);
     AST_free(&last.n);

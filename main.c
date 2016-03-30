@@ -51,8 +51,13 @@ int main()
 
         root = parse(expr);
 
-        if (VERBOSE) AST_print(root);
-        fprintf(stdout, "\n= %.15g\n", AST_eval(root));
+        if (root == NULL) continue;
+
+        if (VERBOSE) {
+            AST_print(root);
+            fputc('\n', stdout);
+        }
+        fprintf(stdout, "= %.15g\n", AST_eval(root));
         AST_free(&root);
     }
     fputc('\n', stdout);

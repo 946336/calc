@@ -481,6 +481,13 @@ Explist Explist_collapse(Explist e)
     return Explist_pop(e);
 }
 
+bool Explist_singleton(Explist e)
+{
+    if (e == NULL) return false;
+    if (e->rest == NULL) return true;
+    return false;
+}
+
 /****************************************************************************/
 /*                                  main.c                                  */
 /****************************************************************************/
@@ -534,8 +541,13 @@ int main()
 
         root = parse(expr);
 
-        if (VERBOSE) AST_print(root);
-        fprintf(stdout, "\n= %.15g\n", AST_eval(root));
+        if (root == NULL) continue;
+
+        if (VERBOSE) {
+            AST_print(root);
+            fputc('\n', stdout);
+        }
+        fprintf(stdout, "= %.15g\n", AST_eval(root));
         AST_free(&root);
     }
     fputc('\n', stdout);
@@ -788,6 +800,7 @@ bool hasHigherPriorityThan(TYPE lhs, TYPE rhs)
 AST_Node parse(char *l)
 {
     Explist e = Explist_new();
+    Explist e_;
     Token t;
     Token last = {'\0', NULL};
     AST_Node root = NULL;
@@ -826,9 +839,16 @@ AST_Node parse(char *l)
             continue;
         }
         if (t.c == RPAREN) {
-            e = Explist_collapse(e);
+            e_ = Explist_collapse(e);
+            if (e == e_) {
+                fprintf(stderr, "%s\n", "Unexpected right parenthesis");
+                Explist_free(&e_);
+                AST_free(&t.n);
+                return NULL;
+            }
+            e= e_;
+            
             AST_free(&t.n);
-
             AST_free(&last.n);
             last.c = t.c;
             last.n = AST_copy(t.n);
@@ -840,6 +860,9 @@ AST_Node parse(char *l)
         last.c = t.c;
         last.n = AST_copy(t.n);
     }
+
+    if (!Explist_singleton(e)) fprintf(stderr, "%s\n", "Unclosed parenthesis");
+
     root = Explist_toAST(e);
     Explist_free(&e);
     AST_free(&last.n);
@@ -953,6 +976,9 @@ bool bindsTighterThan(AST_Node lhs, AST_Node rhs);
 void   AST_print(AST_Node root);
 double AST_eval(AST_Node);
 
+/****************************************************************************/
+
+// Exists primarily as a debugging tool. Useful for tracking program execution
 void label(const char *msg);
 
 #endif
@@ -981,6 +1007,8 @@ Explist Explist_add(AST_Node n, Explist e);
 
 AST_Node Explist_toAST(Explist e);
 Explist  Explist_collapse(Explist e);
+
+bool Explist_singleton(Explist e);
 
 #endif
 
