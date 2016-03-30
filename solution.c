@@ -10,17 +10,407 @@
  *                                                                           *
  * Running:     ./calc                                                       *
  *                                                                           *
- * Notes:       - This version does not implement parenthesized operations   *
- *                or logarithms                                              *
- *              - This calculator reads from standard input and terminates   *
+ * Notes:       - This calculator reads from standard input and terminates   *
  *                on EOF (CTRL+D if not piping or redirecting)               *
  *              - This file is a conglomeration of multiple source files.    *
  *                It's not normally this ugly and convoluted                 *
- *              - This program's behavior on invalid or unimplemented        *
- *                operations is undefined                                    *
  *                                                                           *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+
+/****************************************************************************/
+/*                                  main.c                                  */
+/****************************************************************************/
+
+#include <stdio.h>
+#include <stdlib.h>
+
+#include "parse.h"
+#include "ast.h"
+
+/****************************************************************************/
+
+const char *HEADER =    "+: (addition), -: (subtraction), *: (multiplication), "
+                        "/: (division), %: (modulus), \\: (integer division), "
+                        "^: (power), |: (log: number on left, base on right).\n"
+                        "Parentheses will be honored.\n\n";
+
+const char *PROMPT = ">>> ";
+
+/****************************************************************************/
+
+/* Expanding tabs is controlled by the MY_GETLINE_TABWIDTH define */
+/* If MY_GETLINE_TABWIDTH is defined, my_getline() will replace   */
+/* \t with however many spaces MY_GETLINE_TABWIDTH evaluates to   */
+size_t my_getline(char **buf, size_t *size, FILE *fd);
+
+/****************************************************************************/
+
+int main()
+{
+    char *expr = NULL;
+    size_t size;
+    size_t len;
+
+    AST_Node root = NULL;
+
+    (void) size;
+
+    fprintf(stderr, "%s", HEADER);
+
+    while (!feof(stdin)) {
+        fprintf(stdout, "%s", PROMPT);
+        len = my_getline(&expr, &size, stdin);
+
+        // Empty input
+        if (len == (size_t) -1) continue;
+        if (len == 1) continue;
+
+        // Kill newline character
+        expr[len - 1] = NULLCHAR;
+
+        root = parse(expr);
+
+        if (root == NULL) continue;
+
+        if (VERBOSE) {
+            AST_print(root);
+            fputc('\n', stdout);
+        }
+        fprintf(stdout, "= %.15g\n", AST_eval(root));
+        AST_free(&root);
+    }
+    fputc('\n', stdout);
+
+    free(expr);
+    return 0;
+}
+
+/****************************************************************************/
+
+/* Expanding tabs is controlled by the MY_GETLINE_TABWIDTH define */
+/* If MY_GETLINE_TABWIDTH is defined, my_getline() will replace   */
+/* \t with however many spaces MY_GETLINE_TABWIDTH evaluates to   */
+size_t my_getline(char **buf, size_t *size, FILE *fd)
+{
+        static const int  INIT_SIZE = 256;
+        static const char DELIM1 = '\n';
+        static const char DELIM2 = '\r';
+        static const char NULLCHAR = '\0';
+
+        if (size == NULL) return (size_t) -1;
+
+        if (*buf == NULL) {
+                *buf = malloc(INIT_SIZE * sizeof(**buf));
+                if (*buf == NULL) return (size_t) -1;
+                *size = INIT_SIZE;
+        }
+
+        int c;
+        size_t i = 0;
+
+        char peeking;
+        do {
+                if ((i + 2) >= *size){
+                        *buf = realloc(*buf, 2 * (*size) + 1);
+                        *size *= 2;
+                        if (*buf == NULL) {
+                                return (size_t) -1;
+                        }
+                }
+
+                c = fgetc(fd);
+                if ((i + 2) >= *size){
+                        *buf = realloc(*buf, 2 * (*size) + 1);
+                        *size *= 2;
+                        if (*buf == NULL) {
+                                return (size_t) -1;
+                        }
+                }
+                /* Lines that are actually blank (no newline at all) are */
+                /* reported as invalid. Should only happen in an empty   */
+                /* file.                                                 */
+                if (c < 0){
+                        if (i == 0){
+                                *size = -1;
+                                return (size_t) -1;
+                        }
+                        else ++i;
+                }
+                else {
+                        (*buf)[i] = c;
+                        /* UNIX line endings:       \n   */
+                        /* OSX line endings:        \r   */
+                        /* Windows line endings     \r\n */
+                        #if defined(MY_GETLINE_TABWIDTH)
+                                if ((*buf)[i] == TAB) {
+                                        if (*size <=
+                                            i + MY_GETLINE_TABWIDTH + 1) {
+                                                *buf = realloc(*buf,
+                                                              2 * (*size) + 1);
+                                                *size *= 2;
+                                                if (*buf == NULL)
+                                                        return (size_t) -1;
+                                        }
+                                        #if defined(MY_GETLINE_TABSTOPS)
+                                        int dst_to_tabstop =
+                                                ((i % MY_GETLINE_TABWIDTH) ? 
+                                                (i % MY_GETLINE_TABWIDTH) :
+                                                MY_GETLINE_TABWIDTH);
+                                        for (size_t q = i;
+                                             q < i + dst_to_tabstop;
+                                             ++q) {
+                                                (*buf)[q] = ' ';
+                                        }
+                                        i += dst_to_tabstop - 1;
+                                        #else
+                                        for (size_t q = i;
+                                             q < i + MY_GETLINE_TABWIDTH;
+                                             ++q) {
+                                                (*buf)[q] = ' ';
+                                        }
+                                        i += MY_GETLINE_TABWIDTH - 1;
+                                        #endif
+                                }
+                        #endif
+                        /* UNIX or OS9 */
+                        if (((*buf)[i] == DELIM1) || (*buf)[i] == DELIM2) {
+                                /* Windows */
+                                if ((c == DELIM2) &&
+                                        (peeking = fgetc(fd)) != DELIM1)
+                                                ungetc(peeking, fd);
+                                (*buf)[++i] = NULLCHAR;
+                                return i;
+                        }
+                        ++i;
+                }
+        } while(c > 0); /* EOF returns a negative value */
+
+        (*buf)[i] = NULLCHAR;
+        return i;
+}
+
+/****************************************************************************/
+/*                                operator.h                                */
+/****************************************************************************/
+
+#ifndef CALC_OPERATOR_H
+#define CALC_OPERATOR_H 
+
+#include <stdbool.h>
+
+typedef enum TYPE { LITERAL = 0,
+                    PAREN,
+                    EXP, LOG,
+                    MOD, INT,
+                    PROD, QUOT,
+                    SUM, DIFF
+                  } TYPE;
+
+static const char delim[] = "()^|%\\*/+-";
+
+/****************************************************************************/
+
+#define LIT_CHAR    '$'
+#define PAREN_CHAR  '&'
+#define EXP_CHAR    '^'
+#define LOG_CHAR    '|'
+#define MOD_CHAR    '%'
+#define INT_CHAR    '\\'
+#define PROD_CHAR   '*'
+#define QUOT_CHAR   '/'
+#define SUM_CHAR    '+'
+#define DIFF_CHAR   '-'
+
+#define LPAREN '('
+#define RPAREN ')'
+
+/****************************************************************************/
+
+TYPE  stringtoTYPE(char *str);
+const char *TYPEtostring(TYPE type);
+
+TYPE chartoTYPE(char c);
+char TYPEtochar(TYPE type);
+
+bool hasHigherPriorityThan(TYPE lhs, TYPE rhs);
+
+#endif
+
+/****************************************************************************/
+/*                                operator.c                                */
+/****************************************************************************/
+
+#include <stdlib.h>
+#include <stdio.h>
+
+#include <string.h>
+
+#include "operator.h"
+
+/****************************************************************************/
+
+static const char *LIT_STR =       "[LITERAL]";
+static const char *PAREN_STR =     "[PARENTHESIZED GROUP]";
+static const char *EXP_STR =       "[EXPONENTIATION]";
+static const char *LOG_STR =       "[LOGARITHM]";
+static const char *MOD_STR =       "[MODULUS]";
+static const char *INT_STR =       "[INTEGER DIVISION]";
+static const char *PROD_STR =      "[PRODUCT]";
+static const char *QUOT_STR =      "[QUOTIENT]";
+static const char *SUM_STR =       "[SUM]";
+static const char *DIFF_STR =      "[DIFFERENCE]";
+
+/****************************************************************************/
+
+const char *TYPEtostring(TYPE type)
+{
+    switch (type) {
+        case LITERAL:   return LIT_STR;
+        case PAREN:     return PAREN_STR;
+        case EXP:       return EXP_STR;
+        case LOG:       return LOG_STR;
+        case MOD:       return MOD_STR;
+        case INT:       return INT_STR;
+        case PROD:      return PROD_STR;
+        case QUOT:      return QUOT_STR;
+        case SUM:       return SUM_STR;
+        case DIFF:      return DIFF_STR;
+        default:
+            fprintf(stderr, "%s\n", "TYPEtostring: Cannot convert invalid "
+                                    "TYPE to string");
+            exit(EXIT_FAILURE);
+    }
+}
+
+
+TYPE stringtoTYPE(char *str)
+{
+    if (!strcmp(str, LIT_STR))           return LITERAL;
+    else if (!strcmp(str, PAREN_STR))    return PAREN;
+    else if (!strcmp(str, EXP_STR))      return EXP;
+    else if (!strcmp(str, LOG_STR))      return LOG;
+    else if (!strcmp(str, MOD_STR))      return MOD;
+    else if (!strcmp(str, INT_STR))      return INT;
+    else if (!strcmp(str, PROD_STR))     return PROD;
+    else if (!strcmp(str, QUOT_STR))     return QUOT;
+    else if (!strcmp(str, SUM_STR))      return SUM;
+    else if (!strcmp(str, DIFF_STR))     return DIFF;
+    else {
+        fprintf(stderr, "%s [%s] %s\n", "stringtoTYPE: cannot convert invalid "
+                                        "string", str, "to TYPE");
+        exit(EXIT_FAILURE);
+    }
+}
+
+TYPE chartoTYPE(char c)
+{
+    switch (c) {
+        case LPAREN:     return    PAREN;
+        case RPAREN:     return    PAREN;
+        case EXP_CHAR:   return    EXP;
+        case LOG_CHAR:   return    LOG;
+        case MOD_CHAR:   return    MOD;
+        case INT_CHAR:   return    INT;
+        case PROD_CHAR:  return    PROD;
+        case QUOT_CHAR:  return    QUOT;
+        case SUM_CHAR:   return    SUM;
+        case DIFF_CHAR:  return    DIFF;
+        default:
+            fprintf(stderr, "%s [%c] %s\n", "chartoTYPE: cannot convert "
+                                            "invalid character", c, "to TYPE");
+            exit(EXIT_FAILURE);
+    }
+}
+
+char TYPEtochar(TYPE type)
+{
+    switch (type) {
+        case LITERAL:   return LIT_CHAR;
+        case PAREN:     return PAREN_CHAR;
+        case EXP:       return EXP_CHAR;
+        case LOG:       return LOG_CHAR;
+        case MOD:       return MOD_CHAR;
+        case INT:       return INT_CHAR;
+        case PROD:      return PROD_CHAR;
+        case QUOT:      return QUOT_CHAR;
+        case SUM:       return SUM_CHAR;
+        case DIFF:      return DIFF_CHAR;
+        default:
+            fprintf(stderr, "%s\n", "TYPEtochar: cannot convert invalid TYPE "
+                                    "to character");
+            exit(EXIT_FAILURE);
+    }
+}
+
+bool hasHigherPriorityThan(TYPE lhs, TYPE rhs)
+{
+    if (lhs == rhs) return false;
+
+    switch (lhs) {
+        case LITERAL:   return true;
+        case PAREN:     return lhs < rhs;
+        case EXP:       return (lhs < rhs) && !(rhs == LOG) ;
+        case LOG:       return lhs < rhs;
+        case MOD:       return (lhs < rhs) && !(rhs == INT) ;
+        case INT:       return lhs < rhs;
+        case PROD:      return (lhs < rhs) && !(rhs == QUOT);
+        case QUOT:      return (lhs < rhs);
+        case SUM:       return (lhs < rhs) && !(rhs == DIFF);
+        case DIFF:      return (lhs < rhs);
+        default:        return false;
+    }
+}
+
+/****************************************************************************/
+/*                                  ast.h                                   */
+/****************************************************************************/
+
+#ifndef CALC_AST_H
+#define CALC_AST_H 
+
+#include "operator.h"
+
+#include <stdbool.h>
+#include <stdio.h>
+
+#define VERBOSE false
+
+typedef struct AST_Node *AST_Node;
+
+AST_Node AST_new();
+void     AST_free(AST_Node *n);
+AST_Node AST_copy(AST_Node n);
+
+AST_Node AST_settype(AST_Node n, TYPE type);
+AST_Node AST_setright(AST_Node n, AST_Node r);
+AST_Node AST_setleft(AST_Node n, AST_Node l);
+AST_Node AST_setnum(AST_Node n, double num);
+
+TYPE     AST_gettype(AST_Node n);
+AST_Node AST_getright(AST_Node n);
+AST_Node AST_getleft(AST_Node n);
+double   AST_getnum(AST_Node n);
+
+bool        AST_wellformed(AST_Node root);
+bool        AST_caninsertnum(AST_Node root);
+AST_Node    AST_rightmost(AST_Node root);
+
+AST_Node AST_insert(AST_Node n, AST_Node root);
+AST_Node AST_insertnum(AST_Node n, AST_Node root);
+AST_Node AST_insertoperator(AST_Node n, AST_Node root);
+
+bool bindsTighterThan(AST_Node lhs, AST_Node rhs);
+
+void   AST_print(AST_Node root);
+double AST_eval(AST_Node);
+
+/****************************************************************************/
+
+// Exists primarily as a debugging tool. Useful for tracking program execution
+void label(const char *msg);
+
+#endif
 
 /****************************************************************************/
 /*                                  ast.c                                   */
@@ -386,6 +776,120 @@ double AST_eval(AST_Node root)
 }
 
 /****************************************************************************/
+/*                                tokenize.h                                */
+/****************************************************************************/
+
+#ifndef CALC_TOKENIZE_H
+#define CALC_TOKENIZE_H 
+
+#include "ast.h"
+#include "operator.h"
+
+typedef struct Token {
+    char c;
+    AST_Node n;
+} Token;
+
+static const char NULLCHAR = '\0';
+
+Token next_token(char **str);
+
+#endif
+
+/****************************************************************************/
+/*                                tokenize.c                                */
+/****************************************************************************/
+
+#include "tokenize.h"
+#include "operator.h"
+
+#include <string.h>
+#include <ctype.h>
+
+#include <stdio.h>
+#include <stdlib.h>
+
+/****************************************************************************/
+
+static char matchDelim(char c)
+{
+    for (const char *delim_ = delim; *delim_ != NULLCHAR; delim_++) {
+        if (c == *delim_) return *delim_;
+    }
+    return NULLCHAR;
+}
+
+/****************************************************************************/
+
+Token next_token(char **str)
+{
+    Token t = {'\0', NULL};
+    char *s = *str;
+
+    if ((str == NULL) || (*str == NULL) || (**str == NULLCHAR)) {
+        return t;
+    }
+
+    // Eat whitespace
+    while (isspace(*s)) ++s;
+
+    // If we match a delimiter, we're done
+    if (matchDelim(*s) != NULLCHAR) {
+        t.n = AST_new();
+        AST_settype(t.n, chartoTYPE(*s));
+        t.c = *s;
+
+        *str = ++s;
+        return t;
+    }
+    char *jump = NULL;
+    double literal = strtod(s, &jump);
+
+    // If we matched a number, we're done
+    if (s != jump) {
+        t.n = AST_new();
+        AST_settype(t.n, LITERAL);
+        AST_setnum(t.n, literal);
+        *str = jump;
+        return t;
+    }
+
+    // If we don't know what to do with the string, print an error
+    fprintf(stderr, "%s: [%s]\n", "next_token: invalid expression",
+                                   s);
+    return t;
+}
+
+/****************************************************************************/
+/*                                 explist.h                                */
+/****************************************************************************/
+
+#ifndef CALC_EXPLIST_H
+#define CALC_EXPLIST_H 
+
+#include "ast.h"
+#include "operator.h"
+
+typedef struct Explist *Explist;
+
+Explist Explist_new();
+void    Explist_free(Explist *e);
+
+void Explist_print(Explist e);
+
+Explist Explist_prepend(Explist head, Explist rest);
+Explist Explist_pop(Explist e);
+
+Explist Explist_add(AST_Node n, Explist e);
+
+AST_Node Explist_toAST(Explist e);
+Explist  Explist_collapse(Explist e);
+
+bool Explist_singleton(Explist e);
+
+#endif
+
+/****************************************************************************/
 /*                                 explist.c                                */
 /****************************************************************************/
 
@@ -489,301 +993,20 @@ bool Explist_singleton(Explist e)
 }
 
 /****************************************************************************/
-/*                                  main.c                                  */
+/*                                 parse.h                                  */
 /****************************************************************************/
 
-#include <stdio.h>
-#include <stdlib.h>
+#ifndef CALC_PARSE_H
+#define CALC_PARSE_H 
 
-#include "parse.h"
 #include "ast.h"
-
-/****************************************************************************/
-
-const char *HEADER =    "+: (addition), -: (subtraction), *: (multiplication), "
-                        "/: (division), %: (modulus), \\: (integer division), "
-                        "^: (power), |: (log: number on left, base on right).\n"
-                        "Parentheses will be honored.\n\n";
-
-const char *PROMPT = ">>> ";
-
-/****************************************************************************/
-
-/* Expanding tabs is controlled by the MY_GETLINE_TABWIDTH define */
-/* If MY_GETLINE_TABWIDTH is defined, my_getline() will replace   */
-/* \t with however many spaces MY_GETLINE_TABWIDTH evaluates to   */
-size_t my_getline(char **buf, size_t *size, FILE *fd);
-
-/****************************************************************************/
-
-int main()
-{
-    char *expr = NULL;
-    size_t size;
-    size_t len;
-
-    AST_Node root = NULL;
-
-    (void) size;
-
-    fprintf(stderr, "%s", HEADER);
-
-    while (!feof(stdin)) {
-        fprintf(stdout, "%s", PROMPT);
-        len = my_getline(&expr, &size, stdin);
-
-        // Empty input
-        if (len == (size_t) -1) continue;
-        if (len == 1) continue;
-
-        // Kill newline character
-        expr[len - 1] = NULLCHAR;
-
-        root = parse(expr);
-
-        if (root == NULL) continue;
-
-        if (VERBOSE) {
-            AST_print(root);
-            fputc('\n', stdout);
-        }
-        fprintf(stdout, "= %.15g\n", AST_eval(root));
-        AST_free(&root);
-    }
-    fputc('\n', stdout);
-
-    free(expr);
-    return 0;
-}
-
-/****************************************************************************/
-
-/* Expanding tabs is controlled by the MY_GETLINE_TABWIDTH define */
-/* If MY_GETLINE_TABWIDTH is defined, my_getline() will replace   */
-/* \t with however many spaces MY_GETLINE_TABWIDTH evaluates to   */
-size_t my_getline(char **buf, size_t *size, FILE *fd)
-{
-        static const int  INIT_SIZE = 256;
-        static const char DELIM1 = '\n';
-        static const char DELIM2 = '\r';
-        static const char NULLCHAR = '\0';
-
-        if (size == NULL) return (size_t) -1;
-
-        if (*buf == NULL) {
-                *buf = malloc(INIT_SIZE * sizeof(**buf));
-                if (*buf == NULL) return (size_t) -1;
-                *size = INIT_SIZE;
-        }
-
-        int c;
-        size_t i = 0;
-
-        char peeking;
-        do {
-                if ((i + 2) >= *size){
-                        *buf = realloc(*buf, 2 * (*size) + 1);
-                        *size *= 2;
-                        if (*buf == NULL) {
-                                return (size_t) -1;
-                        }
-                }
-
-                c = fgetc(fd);
-                if ((i + 2) >= *size){
-                        *buf = realloc(*buf, 2 * (*size) + 1);
-                        *size *= 2;
-                        if (*buf == NULL) {
-                                return (size_t) -1;
-                        }
-                }
-                /* Lines that are actually blank (no newline at all) are */
-                /* reported as invalid. Should only happen in an empty   */
-                /* file.                                                 */
-                if (c < 0){
-                        if (i == 0){
-                                *size = -1;
-                                return (size_t) -1;
-                        }
-                        else ++i;
-                }
-                else {
-                        (*buf)[i] = c;
-                        /* UNIX line endings:       \n   */
-                        /* OSX line endings:        \r   */
-                        /* Windows line endings     \r\n */
-                        #if defined(MY_GETLINE_TABWIDTH)
-                                if ((*buf)[i] == TAB) {
-                                        if (*size <=
-                                            i + MY_GETLINE_TABWIDTH + 1) {
-                                                *buf = realloc(*buf,
-                                                              2 * (*size) + 1);
-                                                *size *= 2;
-                                                if (*buf == NULL)
-                                                        return (size_t) -1;
-                                        }
-                                        #if defined(MY_GETLINE_TABSTOPS)
-                                        int dst_to_tabstop =
-                                                ((i % MY_GETLINE_TABWIDTH) ? 
-                                                (i % MY_GETLINE_TABWIDTH) :
-                                                MY_GETLINE_TABWIDTH);
-                                        for (size_t q = i;
-                                             q < i + dst_to_tabstop;
-                                             ++q) {
-                                                (*buf)[q] = ' ';
-                                        }
-                                        i += dst_to_tabstop - 1;
-                                        #else
-                                        for (size_t q = i;
-                                             q < i + MY_GETLINE_TABWIDTH;
-                                             ++q) {
-                                                (*buf)[q] = ' ';
-                                        }
-                                        i += MY_GETLINE_TABWIDTH - 1;
-                                        #endif
-                                }
-                        #endif
-                        /* UNIX or OS9 */
-                        if (((*buf)[i] == DELIM1) || (*buf)[i] == DELIM2) {
-                                /* Windows */
-                                if ((c == DELIM2) &&
-                                        (peeking = fgetc(fd)) != DELIM1)
-                                                ungetc(peeking, fd);
-                                (*buf)[++i] = NULLCHAR;
-                                return i;
-                        }
-                        ++i;
-                }
-        } while(c > 0); /* EOF returns a negative value */
-
-        (*buf)[i] = NULLCHAR;
-        return i;
-}
-
-/****************************************************************************/
-/*                                operator.c                                */
-/****************************************************************************/
-
-#include <stdlib.h>
-#include <stdio.h>
-
-#include <string.h>
-
+#include "explist.h"
+#include "tokenize.h"
 #include "operator.h"
 
-/****************************************************************************/
+AST_Node parse(char *l);
 
-static const char *LIT_STR =       "[LITERAL]";
-static const char *PAREN_STR =     "[PARENTHESIZED GROUP]";
-static const char *EXP_STR =       "[EXPONENTIATION]";
-static const char *LOG_STR =       "[LOGARITHM]";
-static const char *MOD_STR =       "[MODULUS]";
-static const char *INT_STR =       "[INTEGER DIVISION]";
-static const char *PROD_STR =      "[PRODUCT]";
-static const char *QUOT_STR =      "[QUOTIENT]";
-static const char *SUM_STR =       "[SUM]";
-static const char *DIFF_STR =      "[DIFFERENCE]";
-
-/****************************************************************************/
-
-const char *TYPEtostring(TYPE type)
-{
-    switch (type) {
-        case LITERAL:   return LIT_STR;
-        case PAREN:     return PAREN_STR;
-        case EXP:       return EXP_STR;
-        case LOG:       return LOG_STR;
-        case MOD:       return MOD_STR;
-        case INT:       return INT_STR;
-        case PROD:      return PROD_STR;
-        case QUOT:      return QUOT_STR;
-        case SUM:       return SUM_STR;
-        case DIFF:      return DIFF_STR;
-        default:
-            fprintf(stderr, "%s\n", "TYPEtostring: Cannot convert invalid "
-                                    "TYPE to string");
-            exit(EXIT_FAILURE);
-    }
-}
-
-
-TYPE stringtoTYPE(char *str)
-{
-    if (!strcmp(str, LIT_STR))           return LITERAL;
-    else if (!strcmp(str, PAREN_STR))    return PAREN;
-    else if (!strcmp(str, EXP_STR))      return EXP;
-    else if (!strcmp(str, LOG_STR))      return LOG;
-    else if (!strcmp(str, MOD_STR))      return MOD;
-    else if (!strcmp(str, INT_STR))      return INT;
-    else if (!strcmp(str, PROD_STR))     return PROD;
-    else if (!strcmp(str, QUOT_STR))     return QUOT;
-    else if (!strcmp(str, SUM_STR))      return SUM;
-    else if (!strcmp(str, DIFF_STR))     return DIFF;
-    else {
-        fprintf(stderr, "%s [%s] %s\n", "stringtoTYPE: cannot convert invalid "
-                                        "string", str, "to TYPE");
-        exit(EXIT_FAILURE);
-    }
-}
-
-TYPE chartoTYPE(char c)
-{
-    switch (c) {
-        case LPAREN:     return    PAREN;
-        case RPAREN:     return    PAREN;
-        case EXP_CHAR:   return    EXP;
-        case LOG_CHAR:   return    LOG;
-        case MOD_CHAR:   return    MOD;
-        case INT_CHAR:   return    INT;
-        case PROD_CHAR:  return    PROD;
-        case QUOT_CHAR:  return    QUOT;
-        case SUM_CHAR:   return    SUM;
-        case DIFF_CHAR:  return    DIFF;
-        default:
-            fprintf(stderr, "%s [%c] %s\n", "chartoTYPE: cannot convert "
-                                            "invalid character", c, "to TYPE");
-            exit(EXIT_FAILURE);
-    }
-}
-
-char TYPEtochar(TYPE type)
-{
-    switch (type) {
-        case LITERAL:   return LIT_CHAR;
-        case PAREN:     return PAREN_CHAR;
-        case EXP:       return EXP_CHAR;
-        case LOG:       return LOG_CHAR;
-        case MOD:       return MOD_CHAR;
-        case INT:       return INT_CHAR;
-        case PROD:      return PROD_CHAR;
-        case QUOT:      return QUOT_CHAR;
-        case SUM:       return SUM_CHAR;
-        case DIFF:      return DIFF_CHAR;
-        default:
-            fprintf(stderr, "%s\n", "TYPEtochar: cannot convert invalid TYPE "
-                                    "to character");
-            exit(EXIT_FAILURE);
-    }
-}
-
-bool hasHigherPriorityThan(TYPE lhs, TYPE rhs)
-{
-    if (lhs == rhs) return false;
-
-    switch (lhs) {
-        case LITERAL:   return true;
-        case PAREN:     return lhs < rhs;
-        case EXP:       return (lhs < rhs) && !(rhs == LOG) ;
-        case LOG:       return lhs < rhs;
-        case MOD:       return (lhs < rhs) && !(rhs == INT) ;
-        case INT:       return lhs < rhs;
-        case PROD:      return (lhs < rhs) && !(rhs == QUOT);
-        case QUOT:      return (lhs < rhs);
-        case SUM:       return (lhs < rhs) && !(rhs == DIFF);
-        case DIFF:      return (lhs < rhs);
-        default:        return false;
-    }
-}
+#endif
 
 /****************************************************************************/
 /*                                 parse.h                                  */
@@ -868,231 +1091,4 @@ AST_Node parse(char *l)
     AST_free(&last.n);
     return root;
 }
-
-/****************************************************************************/
-/*                                tokenize.c                                */
-/****************************************************************************/
-
-#include "tokenize.h"
-#include "operator.h"
-
-#include <string.h>
-#include <ctype.h>
-
-#include <stdio.h>
-#include <stdlib.h>
-
-/****************************************************************************/
-
-static char matchDelim(char c)
-{
-    for (const char *delim_ = delim; *delim_ != NULLCHAR; delim_++) {
-        if (c == *delim_) return *delim_;
-    }
-    return NULLCHAR;
-}
-
-/****************************************************************************/
-
-Token next_token(char **str)
-{
-    Token t = {'\0', NULL};
-    char *s = *str;
-
-    if ((str == NULL) || (*str == NULL) || (**str == NULLCHAR)) {
-        return t;
-    }
-
-    // Eat whitespace
-    while (isspace(*s)) ++s;
-
-    // If we match a delimiter, we're done
-    if (matchDelim(*s) != NULLCHAR) {
-        t.n = AST_new();
-        AST_settype(t.n, chartoTYPE(*s));
-        t.c = *s;
-
-        *str = ++s;
-        return t;
-    }
-    char *jump = NULL;
-    double literal = strtod(s, &jump);
-
-    // If we matched a number, we're done
-    if (s != jump) {
-        t.n = AST_new();
-        AST_settype(t.n, LITERAL);
-        AST_setnum(t.n, literal);
-        *str = jump;
-        return t;
-    }
-
-    // If we don't know what to do with the string, print an error
-    fprintf(stderr, "%s: [%s]\n", "next_token: invalid expression",
-                                   s);
-    return t;
-}
-
-/****************************************************************************/
-/*                                  ast.h                                   */
-/****************************************************************************/
-
-#ifndef CALC_AST_H
-#define CALC_AST_H 
-
-#include "operator.h"
-
-#include <stdbool.h>
-#include <stdio.h>
-
-#define VERBOSE false
-
-typedef struct AST_Node *AST_Node;
-
-AST_Node AST_new();
-void     AST_free(AST_Node *n);
-AST_Node AST_copy(AST_Node n);
-
-AST_Node AST_settype(AST_Node n, TYPE type);
-AST_Node AST_setright(AST_Node n, AST_Node r);
-AST_Node AST_setleft(AST_Node n, AST_Node l);
-AST_Node AST_setnum(AST_Node n, double num);
-
-TYPE     AST_gettype(AST_Node n);
-AST_Node AST_getright(AST_Node n);
-AST_Node AST_getleft(AST_Node n);
-double   AST_getnum(AST_Node n);
-
-bool        AST_wellformed(AST_Node root);
-bool        AST_caninsertnum(AST_Node root);
-AST_Node    AST_rightmost(AST_Node root);
-
-AST_Node AST_insert(AST_Node n, AST_Node root);
-AST_Node AST_insertnum(AST_Node n, AST_Node root);
-AST_Node AST_insertoperator(AST_Node n, AST_Node root);
-
-bool bindsTighterThan(AST_Node lhs, AST_Node rhs);
-
-void   AST_print(AST_Node root);
-double AST_eval(AST_Node);
-
-/****************************************************************************/
-
-// Exists primarily as a debugging tool. Useful for tracking program execution
-void label(const char *msg);
-
-#endif
-
-/****************************************************************************/
-/*                                 explist.h                                */
-/****************************************************************************/
-
-#ifndef CALC_EXPLIST_H
-#define CALC_EXPLIST_H 
-
-#include "ast.h"
-#include "operator.h"
-
-typedef struct Explist *Explist;
-
-Explist Explist_new();
-void    Explist_free(Explist *e);
-
-void Explist_print(Explist e);
-
-Explist Explist_prepend(Explist head, Explist rest);
-Explist Explist_pop(Explist e);
-
-Explist Explist_add(AST_Node n, Explist e);
-
-AST_Node Explist_toAST(Explist e);
-Explist  Explist_collapse(Explist e);
-
-bool Explist_singleton(Explist e);
-
-#endif
-
-/****************************************************************************/
-/*                                operator.h                                */
-/****************************************************************************/
-
-#ifndef CALC_OPERATOR_H
-#define CALC_OPERATOR_H 
-
-#include <stdbool.h>
-
-typedef enum TYPE { LITERAL = 0,
-                    PAREN,
-                    EXP, LOG,
-                    MOD, INT,
-                    PROD, QUOT,
-                    SUM, DIFF
-                  } TYPE;
-
-static const char delim[] = "()^|%\\*/+-";
-
-/****************************************************************************/
-
-#define LIT_CHAR    '$'
-#define PAREN_CHAR  '&'
-#define EXP_CHAR    '^'
-#define LOG_CHAR    '|'
-#define MOD_CHAR    '%'
-#define INT_CHAR    '\\'
-#define PROD_CHAR   '*'
-#define QUOT_CHAR   '/'
-#define SUM_CHAR    '+'
-#define DIFF_CHAR   '-'
-
-#define LPAREN '('
-#define RPAREN ')'
-
-/****************************************************************************/
-
-TYPE  stringtoTYPE(char *str);
-const char *TYPEtostring(TYPE type);
-
-TYPE chartoTYPE(char c);
-char TYPEtochar(TYPE type);
-
-bool hasHigherPriorityThan(TYPE lhs, TYPE rhs);
-
-#endif
-
-/****************************************************************************/
-/*                                 parse.h                                  */
-/****************************************************************************/
-
-#ifndef CALC_PARSE_H
-#define CALC_PARSE_H 
-
-#include "ast.h"
-#include "explist.h"
-#include "tokenize.h"
-#include "operator.h"
-
-AST_Node parse(char *l);
-
-#endif
-
-/****************************************************************************/
-/*                                tokenize.h                                */
-/****************************************************************************/
-
-#ifndef CALC_TOKENIZE_H
-#define CALC_TOKENIZE_H 
-
-#include "ast.h"
-#include "operator.h"
-
-typedef struct Token {
-    char c;
-    AST_Node n;
-} Token;
-
-static const char NULLCHAR = '\0';
-
-Token next_token(char **str);
-
-#endif
 

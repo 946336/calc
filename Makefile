@@ -27,5 +27,9 @@ operator.o: operator.c operator.h
 tokenize.o: tokenize.h tokenize.c ast.o
 	$(CC) $(CFLAGS) $(NOLINK) $(OPTIMIZE) tokenize.c -o $@ $(LDFLAGS)
 
+solution: solution.c
+	$(CC) $(CFLAGS) $(OPTIMIZE) solution.c -o calc $(LDFLAGS)
+
+
 clean:
 	rm -f *.o calc

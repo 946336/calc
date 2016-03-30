@@ -14,21 +14,18 @@ echo "/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  *                                                                           *
  * Running:     ./calc                                                       *
  *                                                                           *
- * Notes:       - This version does not implement parenthesized operations   *
- *                or logarithms                                              *
- *              - This calculator reads from standard input and terminates   *
+ * Notes:       - This calculator reads from standard input and terminates   *
  *                on EOF (CTRL+D if not piping or redirecting)               *
  *              - This file is a conglomeration of multiple source files.    *
  *                It's not normally this ugly and convoluted                 *
- *              - This program's behavior on invalid or unimplemented        *
- *                operations is undefined                                    *
  *                                                                           *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 " >> solution.tmp
 
-cat *.{c,h} >> solution.tmp
+cat main.c operator.h operator.c ast.h ast.c tokenize.h tokenize.c \
+    explist.h explist.c parse.h parse.c >> solution.tmp
 
 mv solution.tmp solution.c
 
-make calc
+make solution
