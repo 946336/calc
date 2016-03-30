@@ -73,7 +73,7 @@ bool hasHigherPriorityThan(TYPE lhs, TYPE rhs);
 #ifndef CALC_AST_H
 #define CALC_AST_H 
 
-//#include "operator.h"
+// #include "operator.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -123,8 +123,8 @@ void label(const char *msg);
 #ifndef CALC_TOKENIZE_H
 #define CALC_TOKENIZE_H 
 
-//#include "ast.h"
-//#include "operator.h"
+// #include "ast.h"
+// #include "operator.h"
 
 typedef struct Token {
     char c;
@@ -133,6 +133,8 @@ typedef struct Token {
 
 static const char NULLCHAR = '\0';
 
+// Error messages resulting from an invalid token (ie: not math, like "2+cake")
+// originate come from here.
 Token next_token(char **str);
 
 #endif
@@ -144,8 +146,8 @@ Token next_token(char **str);
 #ifndef CALC_EXPLIST_H
 #define CALC_EXPLIST_H 
 
-//#include "ast.h"
-//#include "operator.h"
+// #include "ast.h"
+// #include "operator.h"
 
 typedef struct Explist *Explist;
 
@@ -173,11 +175,13 @@ bool Explist_singleton(Explist e);
 #ifndef CALC_PARSE_H
 #define CALC_PARSE_H 
 
-//#include "ast.h"
-//#include "explist.h"
-//#include "tokenize.h"
-//#include "operator.h"
+// #include "ast.h"
+// #include "explist.h"
+// #include "tokenize.h"
+// #include "operator.h"
 
+// Errors resulting from a badly formed mathematical expression are identified
+// in this function.
 AST_Node parse(char *l);
 
 #endif
@@ -189,8 +193,8 @@ AST_Node parse(char *l);
 #include <stdio.h>
 #include <stdlib.h>
 
-//#include "parse.h"
-//#include "ast.h"
+// #include "parse.h"
+// #include "ast.h"
 
 /****************************************************************************/
 
@@ -365,7 +369,7 @@ size_t my_getline(char **buf, size_t *size, FILE *fd)
 
 #include <string.h>
 
-//#include "operator.h"
+// #include "operator.h"
 
 /****************************************************************************/
 
@@ -485,7 +489,7 @@ bool hasHigherPriorityThan(TYPE lhs, TYPE rhs)
 /*                                  ast.c                                   */
 /****************************************************************************/
 
-//#include "ast.h"
+// #include "ast.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -850,8 +854,8 @@ double AST_eval(AST_Node root)
 /*                                tokenize.c                                */
 /****************************************************************************/
 
-//#include "tokenize.h"
-//#include "operator.h"
+// #include "tokenize.h"
+// #include "operator.h"
 
 #include <string.h>
 #include <ctype.h>
@@ -905,8 +909,7 @@ Token next_token(char **str)
     }
 
     // If we don't know what to do with the string, print an error
-    fprintf(stderr, "%s: [%s]\n", "next_token: invalid expression",
-                                   s);
+    fprintf(stderr, "%s: [%s]\n", "Invalid expression", s);
     return t;
 }
 
@@ -914,7 +917,7 @@ Token next_token(char **str)
 /*                                 explist.c                                */
 /****************************************************************************/
 
-//#include "explist.h"
+// #include "explist.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -1020,10 +1023,10 @@ bool Explist_singleton(Explist e)
 #include <stdlib.h>
 #include <stdio.h>
 
-//#include "parse.h"
-//#include "operator.h"
+// #include "parse.h"
+// #include "operator.h"
 
-//#include "ast.h"
+// #include "ast.h"
 
 AST_Node parse(char *l)
 {
@@ -1072,6 +1075,7 @@ AST_Node parse(char *l)
                 fprintf(stderr, "%s\n", "Unexpected right parenthesis");
                 Explist_free(&e_);
                 AST_free(&t.n);
+                AST_free(&last.n);
                 return NULL;
             }
             e= e_;
@@ -1083,15 +1087,36 @@ AST_Node parse(char *l)
             continue;
         }
 
+        // Literal followed by literal
+        if ((AST_gettype(t.n) == LITERAL) &&
+            ((last.n != NULL) && (AST_gettype(last.n) == LITERAL))) {
+            fprintf(stderr, "%s %.15g and %.15g\n", "Missing operator "
+                            "between", AST_getnum(last.n), AST_getnum(t.n));
+            Explist_free(&e);
+            AST_free(&t.n);
+            AST_free(&last.n);
+            return NULL;
+        }
+
         e = Explist_add(t.n, e);
         AST_free(&last.n);
         last.c = t.c;
         last.n = AST_copy(t.n);
     }
 
-    if (!Explist_singleton(e)) fprintf(stderr, "%s\n", "Unclosed parenthesis");
+    if (!Explist_singleton(e)) {
+        fprintf(stderr, "%s\n", "Unclosed parenthesis");
+        Explist_free(&e);
+    } else {
+        root = Explist_toAST(e);
+    }
 
-    root = Explist_toAST(e);
+    if (!AST_wellformed(root)) {
+        fprintf(stderr, "%s\n", "Incomplete expression - Missing operand "
+                                "to an operator");
+        AST_free(&root);
+    }
+
     Explist_free(&e);
     AST_free(&last.n);
     return root;

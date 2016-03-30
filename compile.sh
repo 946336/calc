@@ -40,6 +40,6 @@ cat \
 
 mv solution.tmp solution.c
 
-sed -i 's/#include ".*/\/\/\0/g' solution.c
+sed -i 's/#include ".*/\/\/ \0/g' solution.c
 
 make solution

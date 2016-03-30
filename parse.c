@@ -57,6 +57,7 @@ AST_Node parse(char *l)
                 fprintf(stderr, "%s\n", "Unexpected right parenthesis");
                 Explist_free(&e_);
                 AST_free(&t.n);
+                AST_free(&last.n);
                 return NULL;
             }
             e= e_;
@@ -68,15 +69,36 @@ AST_Node parse(char *l)
             continue;
         }
 
+        // Literal followed by literal
+        if ((AST_gettype(t.n) == LITERAL) &&
+            ((last.n != NULL) && (AST_gettype(last.n) == LITERAL))) {
+            fprintf(stderr, "%s %.15g and %.15g\n", "Missing operator "
+                            "between", AST_getnum(last.n), AST_getnum(t.n));
+            Explist_free(&e);
+            AST_free(&t.n);
+            AST_free(&last.n);
+            return NULL;
+        }
+
         e = Explist_add(t.n, e);
         AST_free(&last.n);
         last.c = t.c;
         last.n = AST_copy(t.n);
     }
 
-    if (!Explist_singleton(e)) fprintf(stderr, "%s\n", "Unclosed parenthesis");
+    if (!Explist_singleton(e)) {
+        fprintf(stderr, "%s\n", "Unclosed parenthesis");
+        Explist_free(&e);
+    } else {
+        root = Explist_toAST(e);
+    }
 
-    root = Explist_toAST(e);
+    if (!AST_wellformed(root)) {
+        fprintf(stderr, "%s\n", "Incomplete expression - Missing operand "
+                                "to an operator");
+        AST_free(&root);
+    }
+
     Explist_free(&e);
     AST_free(&last.n);
     return root;

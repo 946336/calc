@@ -57,8 +57,7 @@ Token next_token(char **str)
     }
 
     // If we don't know what to do with the string, print an error
-    fprintf(stderr, "%s: [%s]\n", "next_token: invalid expression",
-                                   s);
+    fprintf(stderr, "%s: [%s]\n", "Invalid expression", s);
     return t;
 }
 
